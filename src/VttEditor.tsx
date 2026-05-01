@@ -377,7 +377,9 @@ const VttEditor: React.FC = () => {
             return (
               <div
                 key={cue.id}
-                ref={(el) => (scrollRef.current[cue.id] = el)}
+                ref={(el) => {
+                  scrollRef.current[cue.id] = el;
+                }}
                 style={{
                   marginBottom: "15px",
                   padding: "10px",
