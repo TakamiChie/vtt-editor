@@ -39,6 +39,20 @@ const VttEditor: React.FC = () => {
     localStorage.setItem("vtt-file-extension", fileExtension);
   }, [fileExtension]);
 
+  // 読み込み済みデータがある状態でページ遷移する際に警告を表示
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (cues.length === 0) return;
+      event.preventDefault();
+      event.returnValue = "編集中のデータがあります。ページを離れますか？";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [cues.length]);
+
   // --- ファイル処理 ---
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
