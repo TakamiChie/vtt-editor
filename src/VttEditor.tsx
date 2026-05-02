@@ -45,7 +45,6 @@ const VttEditor: React.FC = () => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!shouldBlockPageLeave(cues.length)) return;
       event.preventDefault();
-      event.returnValue = "編集中のデータがあります。ページを離れますか？";
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
