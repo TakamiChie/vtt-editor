@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { shouldBlockPageLeave } from "./beforeUnload";
 
 // VTTの各セグメント（Cue）の型定義
 interface VttCue {
@@ -42,7 +43,7 @@ const VttEditor: React.FC = () => {
   // 読み込み済みデータがある状態でページ遷移する際に警告を表示
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (cues.length === 0) return;
+      if (!shouldBlockPageLeave(cues.length)) return;
       event.preventDefault();
       event.returnValue = "編集中のデータがあります。ページを離れますか？";
     };
