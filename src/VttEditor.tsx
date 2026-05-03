@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { shouldBlockPageLeave } from "./beforeUnload";
 
 // VTTの各セグメント（Cue）の型定義
 interface VttCue {
@@ -38,6 +39,19 @@ const VttEditor: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("vtt-file-extension", fileExtension);
   }, [fileExtension]);
+
+  // 読み込み済みデータがある状態でページ遷移する際に警告を表示
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!shouldBlockPageLeave(cues.length)) return;
+      event.preventDefault();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [cues.length]);
 
   // --- ファイル処理 ---
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
