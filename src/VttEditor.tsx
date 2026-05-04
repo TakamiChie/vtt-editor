@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { shouldBlockPageLeave } from "./beforeUnload";
 
 // VTTの各セグメント（Cue）の型定義
@@ -67,14 +67,30 @@ const VttEditor: React.FC = () => {
     setCues(nextCues);
   };
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     setUndoStack((prev) => {
       if (prev.length === 0) return prev;
       const previousCues = prev[prev.length - 1];
       setCues(previousCues);
       return prev.slice(0, prev.length - 1);
     });
-  };
+  }, []);
+
+  // Ctrl+Z（MacではCmd+Z）でアンドゥ
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isUndoKey = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
+      if (!isUndoKey) return;
+      if (undoStack.length === 0) return;
+      event.preventDefault();
+      handleUndo();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleUndo, undoStack.length]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
