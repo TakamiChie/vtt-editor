@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { shouldBlockPageLeave } from "./beforeUnload";
 
 // VTTの各セグメント（Cue）の型定義
@@ -10,7 +10,9 @@ interface VttCue {
 }
 
 const VttEditor: React.FC = () => {
+  const UNDO_BUFFER_SIZE = 5;
   const [cues, setCues] = useState<VttCue[]>([]);
+  const [undoStack, setUndoStack] = useState<VttCue[][]>([]);
   const [currentIndex, setCurrentIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isRegex, setIsRegex] = useState(false);
@@ -54,6 +56,42 @@ const VttEditor: React.FC = () => {
   }, [cues.length]);
 
   // --- ファイル処理 ---
+  const updateCuesWithUndo = (nextCues: VttCue[]) => {
+    setUndoStack((prev) => {
+      const nextStack = [...prev, cues];
+      if (nextStack.length > UNDO_BUFFER_SIZE) {
+        return nextStack.slice(nextStack.length - UNDO_BUFFER_SIZE);
+      }
+      return nextStack;
+    });
+    setCues(nextCues);
+  };
+
+  const handleUndo = useCallback(() => {
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const previousCues = prev[prev.length - 1];
+      setCues(previousCues);
+      return prev.slice(0, prev.length - 1);
+    });
+  }, []);
+
+  // Ctrl+Z（MacではCmd+Z）でアンドゥ
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isUndoKey = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
+      if (!isUndoKey) return;
+      if (undoStack.length === 0) return;
+      event.preventDefault();
+      handleUndo();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleUndo, undoStack.length]);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -83,6 +121,7 @@ const VttEditor: React.FC = () => {
         }
       }
     });
+    setUndoStack([]);
     setCues(parsedCues);
   };
 
@@ -107,7 +146,7 @@ const VttEditor: React.FC = () => {
     };
 
     updatedCues.splice(index + 1, 1); // 次の行を削除
-    setCues(updatedCues);
+    updateCuesWithUndo(updatedCues);
   };
 
   // --- 要件2: タイムスタンプジャンプ ---
@@ -327,6 +366,13 @@ const VttEditor: React.FC = () => {
           }}
         >
           <input type="file" onChange={handleFileUpload} accept=".vtt,.txt" />
+          <button
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            style={{ marginLeft: "8px" }}
+          >
+            アンドゥ
+          </button>
           <div style={{ marginTop: "10px" }}>
             <input
               placeholder="Search..."
@@ -415,7 +461,7 @@ const VttEditor: React.FC = () => {
                   onChange={(e) => {
                     const newCues = [...cues];
                     newCues[idx].text = e.target.value;
-                    setCues(newCues);
+                    updateCuesWithUndo(newCues);
                   }}
                 />
                 <button onClick={() => mergeNext(idx)}>Merge with Next</button>
