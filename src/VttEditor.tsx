@@ -25,7 +25,11 @@ const VttEditor: React.FC = () => {
     const saved = localStorage.getItem("vtt-file-extension");
     return saved || "txt";
   });
+  const [audioUrl, setAudioUrl] = useState<string>("");
+  const [audioFileName, setAudioFileName] = useState<string>("");
+  const [isPlaying, setIsPlaying] = useState(false);
   const scrollRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Thresholdが変更されたらローカルストレージに保存
   useEffect(() => {
@@ -101,6 +105,24 @@ const VttEditor: React.FC = () => {
     }
   };
 
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const newAudioUrl = URL.createObjectURL(file);
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return newAudioUrl;
+    });
+    setAudioFileName(file.name);
+    setIsPlaying(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
+
   const parseVtt = (content: string) => {
     const lines = content.split("\n");
     const parsedCues: VttCue[] = [];
@@ -154,6 +176,46 @@ const VttEditor: React.FC = () => {
     setCurrentIndex(index);
     scrollRef.current[cues[index].id]?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const timestampToSeconds = (timestamp: string) => {
+    const [hh, mm, ssMs] = timestamp.split(":");
+    if (!hh || !mm || !ssMs) return 0;
+    const [ss, ms = "0"] = ssMs.split(".");
+    return Number(hh) * 3600 + Number(mm) * 60 + Number(ss) + Number(`0.${ms}`);
+  };
+
+  const playPauseFromCue = useCallback((index: number) => {
+    if (!audioRef.current || !audioUrl) return;
+    const targetCue = cues[index];
+    if (!targetCue) return;
+    setCurrentIndex(index);
+    const player = audioRef.current;
+    if (player.paused) {
+      player.currentTime = timestampToSeconds(targetCue.startTime);
+      player.play().then(() => {
+        setIsPlaying(true);
+      }).catch(() => {
+        setIsPlaying(false);
+      });
+      return;
+    }
+    player.pause();
+    setIsPlaying(false);
+  }, [audioUrl, cues]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "F9") return;
+      if (currentIndex === null) return;
+      event.preventDefault();
+      playPauseFromCue(currentIndex);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [currentIndex, playPauseFromCue]);
 
   // --- 要件3: 指定文字数を下回る行までジャンプ ---
   const jumpToShortLine = () => {
@@ -321,6 +383,7 @@ const VttEditor: React.FC = () => {
             <div
               key={cue.id}
               onClick={() => jumpToCue(idx)}
+              onDoubleClick={() => playPauseFromCue(idx)}
               style={{
                 cursor: "pointer",
                 padding: "8px 4px",
@@ -366,6 +429,12 @@ const VttEditor: React.FC = () => {
           }}
         >
           <input type="file" onChange={handleFileUpload} accept=".vtt,.txt" />
+          <input
+            type="file"
+            onChange={handleAudioUpload}
+            accept="audio/*"
+            style={{ marginLeft: "8px" }}
+          />
           <button
             onClick={handleUndo}
             disabled={undoStack.length === 0}
@@ -480,6 +549,29 @@ const VttEditor: React.FC = () => {
             background: "#f9f9f9",
           }}
         >
+          <label style={{ fontSize: "0.9em", fontWeight: "bold" }}>
+            ミニプレーヤー:
+            {audioUrl ? (
+              <span style={{ marginLeft: "5px", fontWeight: "normal" }}>
+                {audioFileName} ({isPlaying ? "再生中" : "停止中"})
+              </span>
+            ) : (
+              <span style={{ marginLeft: "5px", fontWeight: "normal", color: "#666" }}>
+                音声ファイル未読み込み
+              </span>
+            )}
+          </label>
+          {audioUrl && (
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              controls
+              style={{ maxWidth: "320px" }}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+            />
+          )}
           <label style={{ fontSize: "0.9em", fontWeight: "bold" }}>
             保存拡張子:
             <select
