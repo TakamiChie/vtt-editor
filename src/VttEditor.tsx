@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useEffect,
+  useCallback,
+} from "react";
 import { shouldBlockPageLeave } from "./beforeUnload";
 
 // VTTの各セグメント（Cue）の型定義
@@ -25,7 +31,17 @@ const VttEditor: React.FC = () => {
     const saved = localStorage.getItem("vtt-file-extension");
     return saved || "txt";
   });
+  const [audioUrl, setAudioUrl] = useState<string>("");
+  const [audioFileName, setAudioFileName] = useState<string>("");
+  const [audioStatus, setAudioStatus] = useState<
+    "未読み込み" | "再生中" | "停止中"
+  >("未読み込み");
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   const scrollRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const vttInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const playbackCueIndexRef = useRef<number | null>(null);
 
   // Thresholdが変更されたらローカルストレージに保存
   useEffect(() => {
@@ -79,7 +95,8 @@ const VttEditor: React.FC = () => {
   // Ctrl+Z（MacではCmd+Z）でアンドゥ
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const isUndoKey = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
+      const isUndoKey =
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
       if (!isUndoKey) return;
       if (undoStack.length === 0) return;
       event.preventDefault();
@@ -100,6 +117,34 @@ const VttEditor: React.FC = () => {
       reader.readAsText(file);
     }
   };
+
+  const fileSelectButtonStyle: React.CSSProperties = {
+    border: "1px solid #ccc",
+    background: "#fff",
+    color: "#333",
+    borderRadius: "6px",
+    padding: "6px 10px",
+    fontSize: "0.9em",
+    cursor: "pointer",
+  };
+
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const newAudioUrl = URL.createObjectURL(file);
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return newAudioUrl;
+    });
+    setAudioFileName(file.name);
+    setAudioStatus("停止中");
+  };
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
 
   const parseVtt = (content: string) => {
     const lines = content.split("\n");
@@ -154,6 +199,102 @@ const VttEditor: React.FC = () => {
     setCurrentIndex(index);
     scrollRef.current[cues[index].id]?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const timestampToSeconds = (timestamp: string) => {
+    const [hh, mm, ssMs] = timestamp.split(":");
+    if (!hh || !mm || !ssMs) return 0;
+    const [ss, ms = "0"] = ssMs.split(".");
+    return Number(hh) * 3600 + Number(mm) * 60 + Number(ss) + Number(`0.${ms}`);
+  };
+
+  const findCueIndexByTime = useCallback(
+    (time: number) => {
+      return cues.findIndex((cue) => {
+        const start = timestampToSeconds(cue.startTime);
+        const end = timestampToSeconds(cue.endTime);
+        return time >= start && time <= end;
+      });
+    },
+    [cues],
+  );
+
+  const isElementVisibleInViewport = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= window.innerHeight;
+  };
+
+  const handleAudioTimeUpdate = useCallback(() => {
+    if (!audioRef.current) return;
+    const activeCueIndex = findCueIndexByTime(audioRef.current.currentTime);
+    if (activeCueIndex === -1) return;
+    if (playbackCueIndexRef.current === activeCueIndex) return;
+    playbackCueIndexRef.current = activeCueIndex;
+    const targetElement = scrollRef.current[cues[activeCueIndex].id];
+    if (
+      isAutoScrollEnabled &&
+      targetElement &&
+      !isElementVisibleInViewport(targetElement)
+    ) {
+      targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setCurrentIndex(activeCueIndex);
+  }, [cues, findCueIndexByTime, isAutoScrollEnabled]);
+
+  const playFromCue = useCallback(
+    (index: number) => {
+      if (!audioRef.current || !audioUrl) return;
+      const targetCue = cues[index];
+      if (!targetCue) return;
+      setCurrentIndex(index);
+      playbackCueIndexRef.current = index;
+      const player = audioRef.current;
+      player.currentTime = timestampToSeconds(targetCue.startTime);
+      player.play().catch(() => {
+        // 自動再生制限などで再生できない場合は何もしない
+      });
+      setAudioStatus("再生中");
+    },
+    [audioUrl, cues],
+  );
+
+  const pauseAudio = useCallback(() => {
+    if (!audioRef.current) return;
+    const player = audioRef.current;
+    player.pause();
+    setAudioStatus("停止中");
+  }, []);
+
+  const playPauseFromCue = useCallback(
+    (index: number) => {
+      if (!audioRef.current) return;
+      if (audioRef.current.paused) {
+        playFromCue(index);
+        return;
+      }
+      pauseAudio();
+    },
+    [pauseAudio, playFromCue],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "F9") {
+        if (currentIndex === null) return;
+        event.preventDefault();
+        playFromCue(currentIndex);
+        return;
+      }
+      if (event.key === "F10") {
+        event.preventDefault();
+        pauseAudio();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [currentIndex, pauseAudio, playFromCue]);
 
   // --- 要件3: 指定文字数を下回る行までジャンプ ---
   const jumpToShortLine = () => {
@@ -257,6 +398,12 @@ const VttEditor: React.FC = () => {
     return { speaker, preview, plainText, previewLength };
   };
 
+  const miniPlayerBgColor = (() => {
+    if (audioStatus === "再生中") return "#e8f7e8";
+    if (audioStatus === "停止中") return "#fdeaea";
+    return "#f1f1f1";
+  })();
+
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
       {/* 左サイドバー: タイムスタンプ一覧 */}
@@ -264,96 +411,147 @@ const VttEditor: React.FC = () => {
         style={{
           width: "300px",
           borderRight: "1px solid #ccc",
-          overflowY: "auto",
           padding: "10px",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <h3>Speakers</h3>
+        <div style={{ overflowY: "auto", flex: 1 }}>
+          <h3>Speakers</h3>
+          <div
+            style={{
+              marginBottom: "20px",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "5px",
+            }}
+          >
+            {uniqueSpeakers.length > 0 ? (
+              uniqueSpeakers.map((speaker) => (
+                <span
+                  key={speaker}
+                  style={{
+                    padding: "2px 8px",
+                    backgroundColor: "#e7f3ff",
+                    color: "#007bff",
+                    borderRadius: "12px",
+                    fontSize: "0.75em",
+                    fontWeight: "bold",
+                    border: "1px solid #cce5ff",
+                  }}
+                >
+                  {speaker}
+                </span>
+              ))
+            ) : (
+              <span style={{ fontSize: "0.8em", color: "#999" }}>
+                No speakers found
+              </span>
+            )}
+          </div>
+
+          <h3>Cues</h3>
+          {cues.map((cue, idx) => {
+            const { speaker, preview, plainText, previewLength } =
+              getCuePreview(cue.text);
+
+            // 背景色の決定ロジック
+            let bgColor = "transparent";
+            if (currentIndex === idx) {
+              bgColor = "#e0f0ff"; // 選択中 (青)
+            } else if (plainText.length < charThreshold) {
+              bgColor = "#fff9c4"; // 文字数不足 (黄)
+            } else if (/[、，,]$/.test(plainText)) {
+              bgColor = "#ffe0b2"; // 句読点で終了 (オレンジ)
+            }
+
+            return (
+              <div
+                key={cue.id}
+                onClick={() => jumpToCue(idx)}
+                onDoubleClick={() => playPauseFromCue(idx)}
+                style={{
+                  cursor: "pointer",
+                  padding: "8px 4px",
+                  fontSize: "0.85em",
+                  borderBottom: "1px solid #eee",
+                  backgroundColor: bgColor,
+                }}
+              >
+                <div style={{ fontWeight: "bold", marginBottom: "2px" }}>
+                  {cue.startTime}
+                </div>
+                <div
+                  style={{
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {speaker && (
+                    <span style={{ color: "#007bff", fontWeight: "bold" }}>
+                      [{speaker}]
+                    </span>
+                  )}
+                  <span
+                    style={{ marginLeft: speaker ? "5px" : "0", color: "#555" }}
+                  >
+                    {preview}
+                    {plainText.length > previewLength ? "..." : ""}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
         <div
           style={{
-            marginBottom: "20px",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "5px",
+            marginTop: "10px",
+            borderTop: "1px solid #ddd",
+            paddingTop: "10px",
+            backgroundColor: miniPlayerBgColor,
+            borderRadius: "6px",
+            padding: "10px",
           }}
         >
-          {uniqueSpeakers.length > 0 ? (
-            uniqueSpeakers.map((speaker) => (
-              <span
-                key={speaker}
-                style={{
-                  padding: "2px 8px",
-                  backgroundColor: "#e7f3ff",
-                  color: "#007bff",
-                  borderRadius: "12px",
-                  fontSize: "0.75em",
-                  fontWeight: "bold",
-                  border: "1px solid #cce5ff",
-                }}
-              >
-                {speaker}
-              </span>
-            ))
+          <h3
+            style={{
+              fontSize: "0.9em",
+              fontWeight: "bold",
+              marginTop: 0,
+              marginBottom: "6px",
+            }}
+          >
+            Player(F9:再生 / F10:停止)
+          </h3>
+          {audioUrl ? (
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              controls
+              title={audioFileName}
+              style={{ width: "100%" }}
+              onTimeUpdate={handleAudioTimeUpdate}
+              onPlay={() => setAudioStatus("再生中")}
+              onPause={() => setAudioStatus("停止中")}
+              onEnded={() => setAudioStatus("停止中")}
+            />
           ) : (
-            <span style={{ fontSize: "0.8em", color: "#999" }}>
-              No speakers found
-            </span>
-          )}
-        </div>
-
-        <h3>Cues</h3>
-        {cues.map((cue, idx) => {
-          const { speaker, preview, plainText, previewLength } = getCuePreview(
-            cue.text,
-          );
-
-          // 背景色の決定ロジック
-          let bgColor = "transparent";
-          if (currentIndex === idx) {
-            bgColor = "#e0f0ff"; // 選択中 (青)
-          } else if (plainText.length < charThreshold) {
-            bgColor = "#fff9c4"; // 文字数不足 (黄)
-          } else if (/[、，,]$/.test(plainText)) {
-            bgColor = "#ffe0b2"; // 句読点で終了 (オレンジ)
-          }
-
-          return (
-            <div
-              key={cue.id}
-              onClick={() => jumpToCue(idx)}
-              style={{
-                cursor: "pointer",
-                padding: "8px 4px",
-                fontSize: "0.85em",
-                borderBottom: "1px solid #eee",
-                backgroundColor: bgColor,
-              }}
-            >
-              <div style={{ fontWeight: "bold", marginBottom: "2px" }}>
-                {cue.startTime}
-              </div>
-              <div
-                style={{
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {speaker && (
-                  <span style={{ color: "#007bff", fontWeight: "bold" }}>
-                    [{speaker}]
-                  </span>
-                )}
-                <span
-                  style={{ marginLeft: speaker ? "5px" : "0", color: "#555" }}
-                >
-                  {preview}
-                  {plainText.length > previewLength ? "..." : ""}
-                </span>
-              </div>
+            <div style={{ fontSize: "0.8em", color: "#666" }}>
+              音声ファイル未読み込み
             </div>
-          );
-        })}
+          )}
+          <label
+            style={{ fontSize: "0.85em", display: "block", marginTop: "6px" }}
+          >
+            <input
+              type="checkbox"
+              checked={isAutoScrollEnabled}
+              onChange={(e) => setIsAutoScrollEnabled(e.target.checked)}
+            />{" "}
+            スクロール
+          </label>
+        </div>
       </div>
 
       {/* メインエディタ */}
@@ -365,7 +563,32 @@ const VttEditor: React.FC = () => {
             background: "#f9f9f9",
           }}
         >
-          <input type="file" onChange={handleFileUpload} accept=".vtt,.txt" />
+          <input
+            ref={vttInputRef}
+            type="file"
+            onChange={handleFileUpload}
+            accept=".vtt,.txt"
+            style={{ display: "none" }}
+          />
+          <button
+            onClick={() => vttInputRef.current?.click()}
+            style={fileSelectButtonStyle}
+          >
+            VTTファイルを選択
+          </button>
+          <input
+            ref={audioInputRef}
+            type="file"
+            onChange={handleAudioUpload}
+            accept="audio/*"
+            style={{ display: "none" }}
+          />
+          <button
+            onClick={() => audioInputRef.current?.click()}
+            style={{ ...fileSelectButtonStyle, marginLeft: "8px" }}
+          >
+            音声ファイルを選択
+          </button>
           <button
             onClick={handleUndo}
             disabled={undoStack.length === 0}
