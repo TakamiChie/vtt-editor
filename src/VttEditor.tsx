@@ -228,38 +228,55 @@ const VttEditor: React.FC = () => {
     });
   }, [cues, findCueIndexByTime, isAutoScrollEnabled]);
 
-  const playPauseFromCue = useCallback((index: number) => {
+  const playFromCue = useCallback((index: number) => {
     if (!audioRef.current || !audioUrl) return;
     const targetCue = cues[index];
     if (!targetCue) return;
     setCurrentIndex(index);
     const player = audioRef.current;
-    if (player.paused) {
-      player.currentTime = timestampToSeconds(targetCue.startTime);
-      player.play().then(() => {
-        setIsPlaying(true);
-      }).catch(() => {
-        setIsPlaying(false);
-      });
-      return;
-    }
+    player.currentTime = timestampToSeconds(targetCue.startTime);
+    player.play().then(() => {
+      setIsPlaying(true);
+    }).catch(() => {
+      setIsPlaying(false);
+    });
+  }, [audioUrl, cues]);
+
+  const pauseAudio = useCallback(() => {
+    if (!audioRef.current) return;
+    const player = audioRef.current;
     player.pause();
     setIsPlaying(false);
-  }, [audioUrl, cues]);
+  }, []);
+
+  const playPauseFromCue = useCallback((index: number) => {
+    if (!audioRef.current) return;
+    if (audioRef.current.paused) {
+      playFromCue(index);
+      return;
+    }
+    pauseAudio();
+  }, [pauseAudio, playFromCue]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "F9") return;
-      if (currentIndex === null) return;
-      event.preventDefault();
-      playPauseFromCue(currentIndex);
+      if (event.key === "F9") {
+        if (currentIndex === null) return;
+        event.preventDefault();
+        playFromCue(currentIndex);
+        return;
+      }
+      if (event.key === "F10") {
+        event.preventDefault();
+        pauseAudio();
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [currentIndex, playPauseFromCue]);
+  }, [currentIndex, pauseAudio, playFromCue]);
 
   // --- 要件3: 指定文字数を下回る行までジャンプ ---
   const jumpToShortLine = () => {
