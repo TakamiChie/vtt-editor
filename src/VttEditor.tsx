@@ -33,6 +33,7 @@ const VttEditor: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const vttInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const playbackCueIndexRef = useRef<number | null>(null);
 
   // Thresholdが変更されたらローカルストレージに保存
   useEffect(() => {
@@ -214,18 +215,17 @@ const VttEditor: React.FC = () => {
     if (!audioRef.current) return;
     const activeCueIndex = findCueIndexByTime(audioRef.current.currentTime);
     if (activeCueIndex === -1) return;
-    setCurrentIndex((prev) => {
-      if (prev === activeCueIndex) return prev;
-      const targetElement = scrollRef.current[cues[activeCueIndex].id];
-      if (
-        isAutoScrollEnabled &&
-        targetElement &&
-        !isElementVisibleInViewport(targetElement)
-      ) {
-        targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      return activeCueIndex;
-    });
+    if (playbackCueIndexRef.current === activeCueIndex) return;
+    playbackCueIndexRef.current = activeCueIndex;
+    const targetElement = scrollRef.current[cues[activeCueIndex].id];
+    if (
+      isAutoScrollEnabled &&
+      targetElement &&
+      !isElementVisibleInViewport(targetElement)
+    ) {
+      targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setCurrentIndex(activeCueIndex);
   }, [cues, findCueIndexByTime, isAutoScrollEnabled]);
 
   const playFromCue = useCallback((index: number) => {
@@ -233,6 +233,7 @@ const VttEditor: React.FC = () => {
     const targetCue = cues[index];
     if (!targetCue) return;
     setCurrentIndex(index);
+    playbackCueIndexRef.current = index;
     const player = audioRef.current;
     player.currentTime = timestampToSeconds(targetCue.startTime);
     player.play().catch(() => {
