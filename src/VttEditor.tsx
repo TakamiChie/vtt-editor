@@ -28,6 +28,7 @@ const VttEditor: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [audioFileName, setAudioFileName] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   const scrollRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const vttInputRef = useRef<HTMLInputElement | null>(null);
@@ -195,6 +196,37 @@ const VttEditor: React.FC = () => {
     const [ss, ms = "0"] = ssMs.split(".");
     return Number(hh) * 3600 + Number(mm) * 60 + Number(ss) + Number(`0.${ms}`);
   };
+
+  const findCueIndexByTime = useCallback((time: number) => {
+    return cues.findIndex((cue) => {
+      const start = timestampToSeconds(cue.startTime);
+      const end = timestampToSeconds(cue.endTime);
+      return time >= start && time <= end;
+    });
+  }, [cues]);
+
+  const isElementVisibleInViewport = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= window.innerHeight;
+  };
+
+  const handleAudioTimeUpdate = useCallback(() => {
+    if (!audioRef.current) return;
+    const activeCueIndex = findCueIndexByTime(audioRef.current.currentTime);
+    if (activeCueIndex === -1) return;
+    setCurrentIndex((prev) => {
+      if (prev === activeCueIndex) return prev;
+      const targetElement = scrollRef.current[cues[activeCueIndex].id];
+      if (
+        isAutoScrollEnabled &&
+        targetElement &&
+        !isElementVisibleInViewport(targetElement)
+      ) {
+        targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return activeCueIndex;
+    });
+  }, [cues, findCueIndexByTime, isAutoScrollEnabled]);
 
   const playPauseFromCue = useCallback((index: number) => {
     if (!audioRef.current || !audioUrl) return;
@@ -601,8 +633,17 @@ const VttEditor: React.FC = () => {
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               onEnded={() => setIsPlaying(false)}
+              onTimeUpdate={handleAudioTimeUpdate}
             />
           )}
+          <label style={{ fontSize: "0.9em" }}>
+            <input
+              type="checkbox"
+              checked={isAutoScrollEnabled}
+              onChange={(e) => setIsAutoScrollEnabled(e.target.checked)}
+            />{" "}
+            スクロール
+          </label>
           <label style={{ fontSize: "0.9em", fontWeight: "bold" }}>
             保存拡張子:
             <select
