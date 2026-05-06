@@ -27,7 +27,6 @@ const VttEditor: React.FC = () => {
   });
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [audioFileName, setAudioFileName] = useState<string>("");
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   const scrollRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -127,7 +126,6 @@ const VttEditor: React.FC = () => {
       return newAudioUrl;
     });
     setAudioFileName(file.name);
-    setIsPlaying(false);
   };
 
   useEffect(() => {
@@ -235,10 +233,8 @@ const VttEditor: React.FC = () => {
     setCurrentIndex(index);
     const player = audioRef.current;
     player.currentTime = timestampToSeconds(targetCue.startTime);
-    player.play().then(() => {
-      setIsPlaying(true);
-    }).catch(() => {
-      setIsPlaying(false);
+    player.play().catch(() => {
+      // 自動再生制限などで再生できない場合は何もしない
     });
   }, [audioUrl, cues]);
 
@@ -246,7 +242,6 @@ const VttEditor: React.FC = () => {
     if (!audioRef.current) return;
     const player = audioRef.current;
     player.pause();
-    setIsPlaying(false);
   }, []);
 
   const playPauseFromCue = useCallback((index: number) => {
@@ -387,48 +382,50 @@ const VttEditor: React.FC = () => {
         style={{
           width: "300px",
           borderRight: "1px solid #ccc",
-          overflowY: "auto",
           padding: "10px",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <h3>Speakers</h3>
-        <div
-          style={{
-            marginBottom: "20px",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "5px",
-          }}
-        >
-          {uniqueSpeakers.length > 0 ? (
-            uniqueSpeakers.map((speaker) => (
-              <span
-                key={speaker}
-                style={{
-                  padding: "2px 8px",
-                  backgroundColor: "#e7f3ff",
-                  color: "#007bff",
-                  borderRadius: "12px",
-                  fontSize: "0.75em",
-                  fontWeight: "bold",
-                  border: "1px solid #cce5ff",
-                }}
-              >
-                {speaker}
+        <div style={{ overflowY: "auto", flex: 1 }}>
+          <h3>Speakers</h3>
+          <div
+            style={{
+              marginBottom: "20px",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "5px",
+            }}
+          >
+            {uniqueSpeakers.length > 0 ? (
+              uniqueSpeakers.map((speaker) => (
+                <span
+                  key={speaker}
+                  style={{
+                    padding: "2px 8px",
+                    backgroundColor: "#e7f3ff",
+                    color: "#007bff",
+                    borderRadius: "12px",
+                    fontSize: "0.75em",
+                    fontWeight: "bold",
+                    border: "1px solid #cce5ff",
+                  }}
+                >
+                  {speaker}
+                </span>
+              ))
+            ) : (
+              <span style={{ fontSize: "0.8em", color: "#999" }}>
+                No speakers found
               </span>
-            ))
-          ) : (
-            <span style={{ fontSize: "0.8em", color: "#999" }}>
-              No speakers found
-            </span>
-          )}
-        </div>
+            )}
+          </div>
 
-        <h3>Cues</h3>
-        {cues.map((cue, idx) => {
-          const { speaker, preview, plainText, previewLength } = getCuePreview(
-            cue.text,
-          );
+          <h3>Cues</h3>
+          {cues.map((cue, idx) => {
+            const { speaker, preview, plainText, previewLength } = getCuePreview(
+              cue.text,
+            );
 
           // 背景色の決定ロジック
           let bgColor = "transparent";
@@ -440,44 +437,70 @@ const VttEditor: React.FC = () => {
             bgColor = "#ffe0b2"; // 句読点で終了 (オレンジ)
           }
 
-          return (
-            <div
-              key={cue.id}
-              onClick={() => jumpToCue(idx)}
-              onDoubleClick={() => playPauseFromCue(idx)}
-              style={{
-                cursor: "pointer",
-                padding: "8px 4px",
-                fontSize: "0.85em",
-                borderBottom: "1px solid #eee",
-                backgroundColor: bgColor,
-              }}
-            >
-              <div style={{ fontWeight: "bold", marginBottom: "2px" }}>
-                {cue.startTime}
-              </div>
+            return (
               <div
+                key={cue.id}
+                onClick={() => jumpToCue(idx)}
+                onDoubleClick={() => playPauseFromCue(idx)}
                 style={{
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
+                  cursor: "pointer",
+                  padding: "8px 4px",
+                  fontSize: "0.85em",
+                  borderBottom: "1px solid #eee",
+                  backgroundColor: bgColor,
                 }}
               >
-                {speaker && (
-                  <span style={{ color: "#007bff", fontWeight: "bold" }}>
-                    [{speaker}]
-                  </span>
-                )}
-                <span
-                  style={{ marginLeft: speaker ? "5px" : "0", color: "#555" }}
+                <div style={{ fontWeight: "bold", marginBottom: "2px" }}>
+                  {cue.startTime}
+                </div>
+                <div
+                  style={{
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
                 >
-                  {preview}
-                  {plainText.length > previewLength ? "..." : ""}
-                </span>
+                  {speaker && (
+                    <span style={{ color: "#007bff", fontWeight: "bold" }}>
+                      [{speaker}]
+                    </span>
+                  )}
+                  <span
+                    style={{ marginLeft: speaker ? "5px" : "0", color: "#555" }}
+                  >
+                    {preview}
+                    {plainText.length > previewLength ? "..." : ""}
+                  </span>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        <div style={{ marginTop: "10px", borderTop: "1px solid #ddd", paddingTop: "10px" }}>
+          <div style={{ fontSize: "0.9em", fontWeight: "bold", marginBottom: "6px" }}>
+            ミニプレーヤー
+          </div>
+          {audioUrl ? (
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              controls
+              title={audioFileName}
+              style={{ width: "100%" }}
+              onTimeUpdate={handleAudioTimeUpdate}
+            />
+          ) : (
+            <div style={{ fontSize: "0.8em", color: "#666" }}>音声ファイル未読み込み</div>
+          )}
+          <label style={{ fontSize: "0.85em", display: "block", marginTop: "6px" }}>
+            <input
+              type="checkbox"
+              checked={isAutoScrollEnabled}
+              onChange={(e) => setIsAutoScrollEnabled(e.target.checked)}
+            />{" "}
+            スクロール
+          </label>
+        </div>
       </div>
 
       {/* メインエディタ */}
@@ -629,38 +652,6 @@ const VttEditor: React.FC = () => {
             background: "#f9f9f9",
           }}
         >
-          <label style={{ fontSize: "0.9em", fontWeight: "bold" }}>
-            ミニプレーヤー:
-            {audioUrl ? (
-              <span style={{ marginLeft: "5px", fontWeight: "normal" }}>
-                {audioFileName} ({isPlaying ? "再生中" : "停止中"})
-              </span>
-            ) : (
-              <span style={{ marginLeft: "5px", fontWeight: "normal", color: "#666" }}>
-                音声ファイル未読み込み
-              </span>
-            )}
-          </label>
-          {audioUrl && (
-            <audio
-              ref={audioRef}
-              src={audioUrl}
-              controls
-              style={{ maxWidth: "320px" }}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => setIsPlaying(false)}
-              onTimeUpdate={handleAudioTimeUpdate}
-            />
-          )}
-          <label style={{ fontSize: "0.9em" }}>
-            <input
-              type="checkbox"
-              checked={isAutoScrollEnabled}
-              onChange={(e) => setIsAutoScrollEnabled(e.target.checked)}
-            />{" "}
-            スクロール
-          </label>
           <label style={{ fontSize: "0.9em", fontWeight: "bold" }}>
             保存拡張子:
             <select
