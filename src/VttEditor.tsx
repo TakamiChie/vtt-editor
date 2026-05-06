@@ -27,6 +27,7 @@ const VttEditor: React.FC = () => {
   });
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [audioFileName, setAudioFileName] = useState<string>("");
+  const [audioStatus, setAudioStatus] = useState<"未読み込み" | "再生中" | "停止中">("未読み込み");
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   const scrollRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -126,6 +127,7 @@ const VttEditor: React.FC = () => {
       return newAudioUrl;
     });
     setAudioFileName(file.name);
+    setAudioStatus("停止中");
   };
 
   useEffect(() => {
@@ -236,12 +238,14 @@ const VttEditor: React.FC = () => {
     player.play().catch(() => {
       // 自動再生制限などで再生できない場合は何もしない
     });
+    setAudioStatus("再生中");
   }, [audioUrl, cues]);
 
   const pauseAudio = useCallback(() => {
     if (!audioRef.current) return;
     const player = audioRef.current;
     player.pause();
+    setAudioStatus("停止中");
   }, []);
 
   const playPauseFromCue = useCallback((index: number) => {
@@ -375,6 +379,12 @@ const VttEditor: React.FC = () => {
     return { speaker, preview, plainText, previewLength };
   };
 
+  const miniPlayerBgColor = (() => {
+    if (audioStatus === "再生中") return "#e8f7e8";
+    if (audioStatus === "停止中") return "#fdeaea";
+    return "#f1f1f1";
+  })();
+
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
       {/* 左サイドバー: タイムスタンプ一覧 */}
@@ -476,7 +486,16 @@ const VttEditor: React.FC = () => {
             );
           })}
         </div>
-        <div style={{ marginTop: "10px", borderTop: "1px solid #ddd", paddingTop: "10px" }}>
+        <div
+          style={{
+            marginTop: "10px",
+            borderTop: "1px solid #ddd",
+            paddingTop: "10px",
+            backgroundColor: miniPlayerBgColor,
+            borderRadius: "6px",
+            padding: "10px",
+          }}
+        >
           <div style={{ fontSize: "0.9em", fontWeight: "bold", marginBottom: "6px" }}>
             ミニプレーヤー
           </div>
@@ -488,6 +507,9 @@ const VttEditor: React.FC = () => {
               title={audioFileName}
               style={{ width: "100%" }}
               onTimeUpdate={handleAudioTimeUpdate}
+              onPlay={() => setAudioStatus("再生中")}
+              onPause={() => setAudioStatus("停止中")}
+              onEnded={() => setAudioStatus("停止中")}
             />
           ) : (
             <div style={{ fontSize: "0.8em", color: "#666" }}>音声ファイル未読み込み</div>
