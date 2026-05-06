@@ -30,6 +30,8 @@ const VttEditor: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const scrollRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const vttInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   // Thresholdが変更されたらローカルストレージに保存
   useEffect(() => {
@@ -103,6 +105,16 @@ const VttEditor: React.FC = () => {
       reader.onload = (ev) => parseVtt(ev.target?.result as string);
       reader.readAsText(file);
     }
+  };
+
+  const fileSelectButtonStyle: React.CSSProperties = {
+    border: "1px solid #ccc",
+    background: "#fff",
+    color: "#333",
+    borderRadius: "6px",
+    padding: "6px 10px",
+    fontSize: "0.9em",
+    cursor: "pointer",
   };
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -428,13 +440,32 @@ const VttEditor: React.FC = () => {
             background: "#f9f9f9",
           }}
         >
-          <input type="file" onChange={handleFileUpload} accept=".vtt,.txt" />
           <input
+            ref={vttInputRef}
+            type="file"
+            onChange={handleFileUpload}
+            accept=".vtt,.txt"
+            style={{ display: "none" }}
+          />
+          <button
+            onClick={() => vttInputRef.current?.click()}
+            style={fileSelectButtonStyle}
+          >
+            VTTファイルを選択
+          </button>
+          <input
+            ref={audioInputRef}
             type="file"
             onChange={handleAudioUpload}
             accept="audio/*"
-            style={{ marginLeft: "8px" }}
+            style={{ display: "none" }}
           />
+          <button
+            onClick={() => audioInputRef.current?.click()}
+            style={{ ...fileSelectButtonStyle, marginLeft: "8px" }}
+          >
+            音声ファイルを選択
+          </button>
           <button
             onClick={handleUndo}
             disabled={undoStack.length === 0}
