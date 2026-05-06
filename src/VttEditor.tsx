@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useEffect,
+  useCallback,
+} from "react";
 import { shouldBlockPageLeave } from "./beforeUnload";
 
 // VTTの各セグメント（Cue）の型定義
@@ -27,7 +33,9 @@ const VttEditor: React.FC = () => {
   });
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [audioFileName, setAudioFileName] = useState<string>("");
-  const [audioStatus, setAudioStatus] = useState<"未読み込み" | "再生中" | "停止中">("未読み込み");
+  const [audioStatus, setAudioStatus] = useState<
+    "未読み込み" | "再生中" | "停止中"
+  >("未読み込み");
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   const scrollRef = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -87,7 +95,8 @@ const VttEditor: React.FC = () => {
   // Ctrl+Z（MacではCmd+Z）でアンドゥ
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const isUndoKey = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
+      const isUndoKey =
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
       if (!isUndoKey) return;
       if (undoStack.length === 0) return;
       event.preventDefault();
@@ -198,13 +207,16 @@ const VttEditor: React.FC = () => {
     return Number(hh) * 3600 + Number(mm) * 60 + Number(ss) + Number(`0.${ms}`);
   };
 
-  const findCueIndexByTime = useCallback((time: number) => {
-    return cues.findIndex((cue) => {
-      const start = timestampToSeconds(cue.startTime);
-      const end = timestampToSeconds(cue.endTime);
-      return time >= start && time <= end;
-    });
-  }, [cues]);
+  const findCueIndexByTime = useCallback(
+    (time: number) => {
+      return cues.findIndex((cue) => {
+        const start = timestampToSeconds(cue.startTime);
+        const end = timestampToSeconds(cue.endTime);
+        return time >= start && time <= end;
+      });
+    },
+    [cues],
+  );
 
   const isElementVisibleInViewport = (element: HTMLElement) => {
     const rect = element.getBoundingClientRect();
@@ -228,19 +240,22 @@ const VttEditor: React.FC = () => {
     setCurrentIndex(activeCueIndex);
   }, [cues, findCueIndexByTime, isAutoScrollEnabled]);
 
-  const playFromCue = useCallback((index: number) => {
-    if (!audioRef.current || !audioUrl) return;
-    const targetCue = cues[index];
-    if (!targetCue) return;
-    setCurrentIndex(index);
-    playbackCueIndexRef.current = index;
-    const player = audioRef.current;
-    player.currentTime = timestampToSeconds(targetCue.startTime);
-    player.play().catch(() => {
-      // 自動再生制限などで再生できない場合は何もしない
-    });
-    setAudioStatus("再生中");
-  }, [audioUrl, cues]);
+  const playFromCue = useCallback(
+    (index: number) => {
+      if (!audioRef.current || !audioUrl) return;
+      const targetCue = cues[index];
+      if (!targetCue) return;
+      setCurrentIndex(index);
+      playbackCueIndexRef.current = index;
+      const player = audioRef.current;
+      player.currentTime = timestampToSeconds(targetCue.startTime);
+      player.play().catch(() => {
+        // 自動再生制限などで再生できない場合は何もしない
+      });
+      setAudioStatus("再生中");
+    },
+    [audioUrl, cues],
+  );
 
   const pauseAudio = useCallback(() => {
     if (!audioRef.current) return;
@@ -249,14 +264,17 @@ const VttEditor: React.FC = () => {
     setAudioStatus("停止中");
   }, []);
 
-  const playPauseFromCue = useCallback((index: number) => {
-    if (!audioRef.current) return;
-    if (audioRef.current.paused) {
-      playFromCue(index);
-      return;
-    }
-    pauseAudio();
-  }, [pauseAudio, playFromCue]);
+  const playPauseFromCue = useCallback(
+    (index: number) => {
+      if (!audioRef.current) return;
+      if (audioRef.current.paused) {
+        playFromCue(index);
+        return;
+      }
+      pauseAudio();
+    },
+    [pauseAudio, playFromCue],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -434,19 +452,18 @@ const VttEditor: React.FC = () => {
 
           <h3>Cues</h3>
           {cues.map((cue, idx) => {
-            const { speaker, preview, plainText, previewLength } = getCuePreview(
-              cue.text,
-            );
+            const { speaker, preview, plainText, previewLength } =
+              getCuePreview(cue.text);
 
-          // 背景色の決定ロジック
-          let bgColor = "transparent";
-          if (currentIndex === idx) {
-            bgColor = "#e0f0ff"; // 選択中 (青)
-          } else if (plainText.length < charThreshold) {
-            bgColor = "#fff9c4"; // 文字数不足 (黄)
-          } else if (/[、，,]$/.test(plainText)) {
-            bgColor = "#ffe0b2"; // 句読点で終了 (オレンジ)
-          }
+            // 背景色の決定ロジック
+            let bgColor = "transparent";
+            if (currentIndex === idx) {
+              bgColor = "#e0f0ff"; // 選択中 (青)
+            } else if (plainText.length < charThreshold) {
+              bgColor = "#fff9c4"; // 文字数不足 (黄)
+            } else if (/[、，,]$/.test(plainText)) {
+              bgColor = "#ffe0b2"; // 句読点で終了 (オレンジ)
+            }
 
             return (
               <div
@@ -497,9 +514,16 @@ const VttEditor: React.FC = () => {
             padding: "10px",
           }}
         >
-          <div style={{ fontSize: "0.9em", fontWeight: "bold", marginBottom: "6px" }}>
-            ミニプレーヤー
-          </div>
+          <h3
+            style={{
+              fontSize: "0.9em",
+              fontWeight: "bold",
+              marginTop: 0,
+              marginBottom: "6px",
+            }}
+          >
+            Player(F9:再生 / F10:停止)
+          </h3>
           {audioUrl ? (
             <audio
               ref={audioRef}
@@ -513,9 +537,13 @@ const VttEditor: React.FC = () => {
               onEnded={() => setAudioStatus("停止中")}
             />
           ) : (
-            <div style={{ fontSize: "0.8em", color: "#666" }}>音声ファイル未読み込み</div>
+            <div style={{ fontSize: "0.8em", color: "#666" }}>
+              音声ファイル未読み込み
+            </div>
           )}
-          <label style={{ fontSize: "0.85em", display: "block", marginTop: "6px" }}>
+          <label
+            style={{ fontSize: "0.85em", display: "block", marginTop: "6px" }}
+          >
             <input
               type="checkbox"
               checked={isAutoScrollEnabled}
